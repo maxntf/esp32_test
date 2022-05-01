@@ -237,14 +237,14 @@ int SendRequest(Method_t method, char* url_str, char* payload)
 		pos += sprintf_s(&reqBuf[pos], sizeof(reqBuf) - pos, "Accept: text/html\r\nConnection: close\r\n\r\n");
 	}
 	else {
-		pos += sprintf_s(&reqBuf[pos], sizeof(reqBuf) - pos, "Content-Type: text/html\r\nContent-length: %i\r\n\r\n%s", strlen(payload), payload);
+		pos += sprintf_s(&reqBuf[pos], sizeof(reqBuf) - pos, "Content-Type: text/html\r\nContent-length: %i\r\n\r\n%s", (int)strlen(payload), payload);
 	}
 	if (pos > REQUEST_MAXLEN) return -1;
 	//Establish TCP Connection
 	sprintf_s(cmd, sizeof(cmd), "AT+CIPSTART=\"TCP\",\"%s\",80\r\n", host);
 	AtHandler(tcpMasks, sizeof(tcpMasks) / sizeof(tcpMasks[0]), &fmask, cmd, CMDRESP_TO);
 	if (CHECK_MSK(fmask, IP_CONNECTED_MSK)) {
-		sprintf_s(cmd, sizeof(cmd), "AT+CIPSEND=%i\r\n", strlen(reqBuf));
+		sprintf_s(cmd, sizeof(cmd), "AT+CIPSEND=%i\r\n", (int)strlen(reqBuf));
 		//Send request and payload
 		AtHandler(indiMask, sizeof(indiMask) / sizeof(indiMask[0]), &fmask, cmd, CMDRESP_TO);
 		if (CHECK_MSK(fmask, MSK_INDICATOR)) {

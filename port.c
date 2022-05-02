@@ -2,6 +2,12 @@
 
 static PortHandler_t pHandler = {.IsOpen = FALSE};
 
+/** OpenSerialPort
+* @brief			Open serial port
+* @param[in]				device: serial port name;
+* @param[in]				baud_rate: baud rate;
+* @return			Integer	0 or 1
+*/
 int OpenSerialPort(const char* device, uint32_t baud_rate)
 {
 	pHandler.port = CreateFileA(device, GENERIC_READ | GENERIC_WRITE, 0, NULL,
@@ -40,6 +46,10 @@ int OpenSerialPort(const char* device, uint32_t baud_rate)
 	pHandler.IsOpen = TRUE;
 	return 1;
 }
+/** CloseSerialPort
+* @brief			Close serial port
+* @return			
+*/
 void CloseSerialPort()
 {
 	if (pHandler.IsOpen) {
@@ -47,6 +57,12 @@ void CloseSerialPort()
 		CloseHandle(pHandler.port);
 	}
 }
+/** WritePort
+* @brief			Write serial port
+* @param[in]				buffer: date buffer;
+* @param[in]				size: data size;
+* @return			-1 is error, 0 is no transmit data or 1
+*/
 int WritePort(uint8_t* buffer, size_t size)
 {
 	if (!pHandler.IsOpen) return -1;
@@ -62,9 +78,15 @@ int WritePort(uint8_t* buffer, size_t size)
 	}
 	return 1;
 }
+/** ReadPort
+* @brief			Read serial port
+* @param[out]				buffer: input buffer;
+* @param[in]				size: buffer size;
+* @return			-1 is error or received data length
+*/
 int ReadPort(uint8_t* buffer, size_t size)
 {
-	if (!pHandler.IsOpen) return 0;
+	if (!pHandler.IsOpen) return -1;
 	DWORD NoBytesRead;
 	uint8_t b;
 	uint32_t len = 0;
@@ -75,33 +97,21 @@ int ReadPort(uint8_t* buffer, size_t size)
 	} while ((len <= size) && (NoBytesRead > 0));
 	return len;
 }
-int ReadLine(uint8_t* buffer, size_t size, uint32_t to)
-{
-	if (!pHandler.IsOpen) return -1;
-	int offset = 0;
-	int result = 0;
-	to /= SERIAL_RX_TO;
-	do {
-		result = ReadPort(&buffer[offset], size - offset);
-		if (result < 0) return result;
-		offset += result;
-		buffer[offset] = '\0';
-		if (offset > 2 && buffer[offset - 2] == '\r' && buffer[offset - 1] == '\n') {
-			break;
-		}
-		to--;
-	} while ((to > 0) && (offset < size));
-	if (!to) return 0;
-	return offset;
-}
-uint32_t ReadDataWait(char* buf, size_t size, uint32_t to)
+/** ReadDataWait
+* @brief			Reading data with a timeout
+* @param[out]				buffer: input buffer;
+* @param[in]				size: buffer size;
+* @param[in]				to: timeout;
+* @return			0 or received data length
+*/
+uint32_t ReadDataWait(char* buffer, size_t size, uint32_t to)
 {
 	int res = 0;
 	uint32_t offset = 0;
 	to /= SERIAL_RX_TO;
 
 	while ((offset < size) && (to > 0)) {
-		res = ReadPort(&buf[offset], size - offset);
+		res = ReadPort(&buffer[offset], size - offset);
 		if (res < 0) return 0;
 		if (res) {
 			offset += res;
@@ -112,7 +122,7 @@ uint32_t ReadDataWait(char* buf, size_t size, uint32_t to)
 		}
 	}
 	if (offset >= size) return 0;
-	buf[offset] = '\0';
+	buffer[offset] = '\0';
 	return offset;
 }
 

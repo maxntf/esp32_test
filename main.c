@@ -1,40 +1,15 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <windows.h>
+#include "main.h"
 #include "port.h"
+#include "utils.h"
 
-
-#define HOST_MAXLEN		100U		
-#define PATH_MAXLEN		100U		
-#define HEAD_SIZE		74U		
-#define POST_BUF_SIZE	(unsigned int)(TX_PYLO_MAXLEN + HOST_MAXLEN + PATH_MAXLEN + HEAD_SIZE)
-
-#define REQUEST_MAXLEN	POST_BUF_SIZE
-#define RESPONSE_MAXLEN	RX_PYLO_MAXLEN		
-
+/* WiFi setings */
 const char* _ssid = WIFI_SSID;
 const char* _pwd = WIFI_PWD;
-
+/* Request and response buffers */
 char reqBuf[REQUEST_MAXLEN];
 char respBuf[RESPONSE_MAXLEN];
-
-typedef enum {GET = 0, POST = !GET} Method_t;
-
-#define CHECK_MSK(f,msk)	((f & msk) == msk)
-#define MSK_OK				(uint8_t)0x1
-#define MSK_SEND_OK			(uint8_t)0x1
-#define MSK_INDICATOR		(uint8_t)0x1
-#define MSK_ERROR			(uint8_t)0x2
-#define MSK_WFCONN			(uint8_t)0x4
-#define MSK_WFGIP			(uint8_t)0x8
-	#define WIFI_CONNECTED_MSK	(uint8_t)(MSK_OK | MSK_WFCONN | MSK_WFGIP)
-#define MSK_IPCONNECT		(uint8_t)0x4	
-	#define IP_CONNECTED_MSK	(uint8_t)(MSK_OK | MSK_IPCONNECT)
-
+/* At commands response masks */
 const char const* defMasks[] = { "OK", "ERROR" };
-#define DEFMASK_SIZE	(sizeof(defMasks)/sizeof(defMasks[0]))
 const char const* wifiMasks[] = { "OK", "ERROR", "WIFI CONNECTED", "WIFI GOT IP"};
 const char const* tcpMasks[] = { "OK", "ERROR", "CONNECT"};
 const char const* sendMasks[] = { "SEND OK", "ERROR" };
@@ -93,31 +68,32 @@ void ConsoleInputWait(char* buf, size_t size)
 }
 /** InputHandler
 * @brief			Command input handler
+* @param[in]				mem: input buffer  
+* @param[in]				size: input buffer size  
 * @param[out]				method: method type pointer;
 * @param[out]				url: url buffer pointer;
 * @param[out]				payload: data buffer pointer;
 * @return			Total input commands or -1 if exit
 */
-int InputHandler(char* method, char* url, char* payload)
+int InputHandler(char* mem, size_t size, char** method, char** url, char** payload)
 {
-	char buf[HOST_MAXLEN + PATH_MAXLEN + TX_PYLO_MAXLEN];
-	char* pt = buf;
+	char* pt = mem;
 	char* begin = pt;
-	char* pparams[3] = { method, url, payload };
+	char** pparams[3] = { method, url, payload};
 	uint32_t psizes[3] = { 5, HOST_MAXLEN + PATH_MAXLEN, TX_PYLO_MAXLEN };
 	int ipp = 0;
 
 	printf("Pleas enter request in the format(<REQ><URL>[<BODY>]) or exit:\r\n");
-	ConsoleInputWait(buf, sizeof(buf));
-	if (strlen(buf) < 4) return 0;
-	if (!memcmp(buf, "Exit", 4)) return -1;
+	ConsoleInputWait(mem, size);
+	if (strlen(mem) < 4) return 0;
+	if (!memcmp(mem, "exit", 4)) return -1;
 	while (*pt != '\0') {
 		if (*pt == '<') begin = pt + 1;
 		else if (*pt == '>') {
 			*pt = '\0';
 			uint32_t len = pt - begin;
-			if (len <= psizes[ipp]) strcpy_s(pparams[ipp], psizes[ipp], begin);
-			else return 0;//incorrect parameters lenght
+			if (len <= psizes[ipp]) *(pparams[ipp]) = begin;
+				else return 0;//incorrect parameters lenght
 			if (++ipp == 3) return ipp;
 		}
 		pt++;
@@ -184,7 +160,7 @@ int Esp32Init()
 	const char const* cmd[] = { "AT\r\n", "AT+RST\r\n", "ATE0\r\n", "AT+CWMODE=1,0\r\n", "AT+CIPMUX=0\r\n"};
 	uint8_t fmask = 0;
 	for (int i = 0; i < sizeof(cmd) / sizeof(cmd[0]); i++) {
-		AtHandler(defMasks, DEFMASK_SIZE, &fmask, cmd[i], CMDRESP_TO);
+		AtHandler(defMasks, (sizeof(defMasks) / sizeof(defMasks[0])), &fmask, cmd[i], CMDRESP_TO);
 		if (CHECK_MSK(fmask, MSK_OK)) continue;
 		return -1;
 	}
@@ -257,14 +233,17 @@ int SendRequest(Method_t method, char* url_str, char* payload)
 
 int main(void) 
 {
-	char method[5];
-	char url[HOST_MAXLEN + PATH_MAXLEN];
-	char data[TX_PYLO_MAXLEN];
+	char* method;
+	char* url;
+	char* data;
 	char device[11];
+	char mem[HOST_MAXLEN + PATH_MAXLEN + TX_PYLO_MAXLEN];
+
+	//Test_InputHandler();
 
 	printf("Pleas set the serial port in the format (COMx): ");
-	ConsoleInputWait(url, sizeof(url));
-	sprintf_s(device, sizeof(device), "\\\\.\\%s", url);
+	ConsoleInputWait(mem, 6);
+	sprintf_s(device, sizeof(device), "\\\\.\\%s", mem);
 
 	if (!OpenSerialPort(device, UART_BAUDRATE))
 	{ 
@@ -282,7 +261,7 @@ int main(void)
 	}
 	printf("ESP32 initialized, WiFi connected.\n");
 	while (1) {
-		int res = InputHandler(method, url, data);
+		int res = InputHandler(mem, sizeof(mem), &method, &url, &data);
 		if (res < 0) break;
 		Method_t mtpy;
 		if (res == 3 && !memcmp(method, "POST", 4)) {
